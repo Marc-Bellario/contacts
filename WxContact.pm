@@ -15,6 +15,7 @@ our $xrc = './res/xrc_contact_dialog.xrc'; # location of resource file
 
 our $dialogID = 'MyDialog1'; # XML ID of the main frame 
 
+#
 
 our $OpenFile = \&OpenFile; # A routine to read data from a file 
 our $SaveFile = \&SaveFile; # A routine to write data to a file 
