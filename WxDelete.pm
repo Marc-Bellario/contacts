@@ -1,7 +1,10 @@
 package WxDelete; use base qw(Wx::App Exporter); 
 # use Class::Date qw(:errors date localdate gmdate now -DateParse -EnvC);
 use strict; 
-use Exporter; 
+use Exporter;
+use v5.10;
+use App::db::contacts; 
+
 our $VERSION = 0.10;
 our @EXPORT_OK = qw(
 $frame $xr show_delete  $currentData $xrc 
@@ -16,7 +19,9 @@ our $xrc = '.\\res\\xrc_delete_dialog.xrc'; # location of resource file
 
 our $dialogID = 'MyDialog2'; # XML ID of the main frame 
    my @lclDBData;
-
+    
+    my $g_id;
+    my $g_prodswt = 0;
 # it is the routine called before the end 
 # it needs to Destroy() all top level dialogs 
 our $icon = Wx::GetWxPerlIcon(); 
@@ -77,12 +82,16 @@ $md->ShowModal();
 
 
 sub show_delete {
-    my(@tmpDBData ) = @_;
-   @lclDBData = @tmpDBData;
+    my(@tmp ) = @_;
+    $g_id = $tmp[0];
+#   @lclDBData = @tmpDBData;
 #    my $dialog = $self->xrc->LoadDialog( $parent || $self, 'dlg1' );
-
+my $allcontacts =    App::db::contacts->retrieve($g_id); 
+my $fname = $allcontacts->Contact_FirstName;
+my $lname = $allcontacts->Contact_LastName;
 my ($idLabel) = FindWindowByXid('m_staticText14');
-         $idLabel->SetLabel("id: $tmpDBData[0]\n fname: $tmpDBData[2]\n lname: $tmpDBData[3]\n");
+
+         $idLabel->SetLabel("id: $g_id\n fname: $fname\n lname: $lname\n");
 
     $dialog->ShowModal();
 #    $dialog->Destroy;
@@ -102,19 +111,15 @@ sub OnDelete {
     use Wx qw(wxOK wxCENTRE);
         my @data = @lclDBData;
 
-      print " Enter Delete sub \n ";
-         
-    my $dbfile = "contactmanagement.db";
-    my $dbh = DBI->connect("dbi:SQLite:dbname=$dbfile","","", {});
-     
-my $statement = "DELETE FROM ContactData WHERE ContactID=" . $data[0] ;
-
-    $dbh->do($statement);
-
-    $dbh->disconnect;
-    # Refresh();
+      say " Enter Delete sub .. " unless $g_prodswt;;
+ 
+my $allcontacts =    App::db::contacts->retrieve($g_id);
+my $bname = $allcontacts->Contact_LastName;
+ $allcontacts->delete;
+ 
+     # Refresh();
     
-    Wx::MessageBox("_lbl1: $data[0]\n $data[1]\n(c)DamienLearnsPerl",  # text
+    Wx::MessageBox("_lbl1: $g_id\n $bname\n(c) More On Perl",  # text
                    "About",                   # title bar
                    wxOK|wxCENTRE,             # buttons to display on form
                    $this                      # parent

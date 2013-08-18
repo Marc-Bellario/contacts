@@ -4,7 +4,7 @@
 
 use FindBin;
 use lib "$FindBin::Bin";
-
+use v5.10;
 #use lib "C:\\Documents and Settings\\will\\Desktop\\projects\\contact_app";
 use Wx 0.15 qw[:allclasses];
 use strict;
@@ -18,6 +18,7 @@ use base qw(Wx::Frame);
 use strict;
 use warnings;
 use DBI          qw();
+use App::db::contacts; 
 
 use WxContact qw(StartApp   $frame $xr show_add show_dialog %test_list 
 $xrc $frmID $sbar %menu  $CloseWin $icon %txtctrl $dialog $frameGrid ) ;
@@ -32,7 +33,9 @@ my $search_state;
 my $g_sqlcount;
 my $g_sqlselect;
 my @g_grid_id_array;
-
+my $g_prod_swt = 0;
+my $g_current_id;
+my $g_srch_cnt;
 #global --- other
 my $g_self; 
 
@@ -144,13 +147,15 @@ sub __set_properties {
  sub G2S {
   my $event = shift;
   my( $x, $y ) = ( $event->GetCol, $event->GetRow );
-   @currentDataRow = getCurrent($y);
+#   @currentDataRow = getCurrent($y);
+   $g_current_id = $g_grid_id_array[$y];
+
   return "( $x, $y )";
 }
  
 sub show_dialog_local
 {
-   show_dialog(0, @currentDataRow);
+   show_dialog(0, $g_current_id);
    Refresh();	
 }       
 
@@ -181,7 +186,7 @@ sub name_search_sql
  sub state_search_sql
 {
 	my  $search_crit = shift;
-	print " state search ---> $search_crit\n";
+	print " state search ---> $search_crit\n" unless $g_prod_swt;;
         $g_sqlcount =  " SELECT COUNT(*)  FROM ContactData where Contact_State = '$search_crit'";
         $g_sqlselect =   "SELECT " . $tmpe . " FROM ContactData where Contact_State = '$search_crit'";
  }
@@ -189,72 +194,75 @@ sub name_search_sql
       
 sub Delete
 {
-	print "Del: $currentDataRow[0] \n"; 
-       show_delete(@currentDataRow);                     
+	say "Del: $currentDataRow[0] " unless $g_prod_swt;
+       show_delete($g_current_id);         
+       Refresh();            
 }
 
  sub Search
 {
 	my $local = $currentData;
-	print "Search: $local \n"; 
+	say "Search: $local " unless $g_prod_swt;
        my($type,$crit) = show_search();
-       print "crit: $crit \n";
-       print "type: $type\n";
-       setsql($type,$crit);   
-       Search_Refresh();                     
+       print "crit: $crit \n" unless $g_prod_swt;
+       print "type: $type\n" unless $g_prod_swt;
+       my @results = setsql($type,$crit);   
+       Search_Refresh(@results);                     
 }     
 
 sub setsql
 {
        my ($type,$search_crit) = @_;
 
-         print "setsql- type: $type - crit: $search_crit\n";
+         say "setsql- type: $type - crit: $search_crit" unless $g_prod_swt;
 
-
+          my @contactresults;
 
 
                                if ($type == 1)
                                {  
                                	        state_search_sql($search_crit);
+                               	       @contactresults = App::db::contacts->search_where(Contact_State => $search_crit);
+                               	        $g_srch_cnt = App::db::contacts->count_search_where(Contact_State => $search_crit);
+
                                }     
-                               else
+                               elsif ($type == 2)
                                {
-                               	         if ($type == 2)
-                                        {  
-                                        	 name_search_sql($search_crit);
-                                        }     
-                                       else
-                                        {
-                                        	if ($type == 3)
-                                                {  
-                                                	type_search_sql($search_crit);
-                                                }     
- 
-                                        }	                
+                                         name_search_sql($search_crit);
+                                         @contactresults = App::db::contacts->search_where(Contact_LastName => $search_crit);
+                                         $g_srch_cnt = App::db::contacts->count_search_where(Contact_LastName => $search_crit);
+
+                               }        	 
+                               elsif ($type == 3)
+                               {
+                                       	type_search_sql($search_crit);
+                                         @contactresults = App::db::contacts->search_where(Contact_Type => $search_crit);
+                                        $g_srch_cnt = App::db::contacts->count_search_where(Contact_Type => $search_crit);
                                }
                                
-                               
+                               return @contactresults;
 }
  
 sub Search_Refresh
 {
 	
-	print "g_select: $g_sqlselect\n";
+	my @results = @_;
+	
+	print "g_select: $g_sqlselect\n" unless $g_prod_swt;
 	
 	my $sqlselect = $g_sqlselect;
 	
-    my $dbh = DBI->connect("dbi:SQLite:dbname=$dbfile","","", {});
 
 
-    my ($count) = $dbh->selectrow_array($g_sqlcount);
+    my ($count) = $g_srch_cnt;
  
  
-    print  "cnt: $count\n";
+    print  "cnt: $count\n" unless $g_prod_swt;
 
 	$g_self->SetTitle("CONTACTS-");
 	$g_self->{grid_1}->Destroy();
 	
-	print "after destroy\n";
+	print "after destroy\n" unless $g_prod_swt;
 	
         $g_self->{grid_1} = Wx::Grid->new($g_self, -1);
 	$g_self->{grid_1}->CreateGrid($count, 6);
@@ -264,47 +272,25 @@ sub Search_Refresh
 	$g_self->__do_layout();
 
 
-
-   my $sth = $dbh->prepare($sqlselect);
-    $sth->execute();
-
     my $cnt_row = 0;
     my $cnt_col = 0;
     
-    while (my @result = $sth->fetchrow_array()) {
-            print ". ";
-            $g_self->{grid_1}->SetCellValue($cnt_row, 0, $result[1] );
-            $g_self->{grid_1}->SetCellValue($cnt_row, 1, $result[2] );
-            $g_self->{grid_1}->SetCellValue($cnt_row, 2, $result[3] );
-            $g_self->{grid_1}->SetCellValue($cnt_row, 3, $result[4] );
-            $g_self->{grid_1}->SetCellValue($cnt_row, 4, $result[5] );
-            $g_self->{grid_1}->SetCellValue($cnt_row, 5, $result[6] );
-            push ( @g_grid_id_array, $result[0] );
-            $cnt_row++;
-    	
-    }
+    set_cells(@results);
     
-    print "\n";
     
-    $sth->finish;
- 	
-	
-       
- $dbh->disconnect;
+    print "\n" unless $g_prod_swt;
 	
 }     
   
 sub Init
 {
 
-    initsql();
+#    initsql();
 
 
-    my $dbh = DBI->connect("dbi:SQLite:dbname=$dbfile","","", {});
+    my $allcontacts =    App::db::contacts->retrieve_all;
 
-
-
-    my ($count) = $dbh->selectrow_array($g_sqlcount);
+    my ($count) = $allcontacts->count;
 
 
 	$g_self->SetTitle("CONTACTS");
@@ -312,36 +298,19 @@ sub Init
 	$g_self->{grid_1}->CreateGrid($count, 6);
 	$g_self->{grid_1}->SetSelectionMode(wxGridSelectRows);
 		SetHeading();
-		
 
-   my $sth = $dbh->prepare($g_sqlselect);
+    my @allcontacts =    App::db::contacts->retrieve_all;
 
-    $sth->execute();
+if( $@ ) { 
+# There was an error: 
+die $@; 
+} 
+
 
     my $cnt_row = 0;
     my $cnt_col = 0;
-    
-    while (my @result = $sth->fetchrow_array()) {
-    
-            $g_self->{grid_1}->SetCellValue($cnt_row, 0, $result[1] );
-            $g_self->{grid_1}->SetCellValue($cnt_row, 1, $result[2] );
-            $g_self->{grid_1}->SetCellValue($cnt_row, 2, $result[3] );
-            $g_self->{grid_1}->SetCellValue($cnt_row, 3, $result[4] );
-            $g_self->{grid_1}->SetCellValue($cnt_row, 4, $result[5] );
-            $g_self->{grid_1}->SetCellValue($cnt_row, 5, $result[6] );
-            push ( @g_grid_id_array, $result[0] );
-            $cnt_row++;
-            
-    
-    	
-#        print "id: $result[0], lname: $result[1], fname: $result[2], email: $result[3], password: $result[4]\n";
-    }
-    $sth->finish;
- 	
-	
-#        $self->{grid_1}->SetCellValue(0, 0, "wxGrid is Good");
-        
- $dbh->disconnect;
+ 
+     set_cells(@allcontacts);
 	
 }       
 
@@ -358,6 +327,7 @@ sub add_dialog
 	my $tmp = join (".",@darray);
 	$currentData = $id . " " . $tmp;
        show_dialog(1);
+       Refresh();
 }       
        
 sub getCurrent
@@ -365,50 +335,10 @@ sub getCurrent
 	my ($index) = @_;
 	my $id = $g_grid_id_array[$index];
 	
-	print "id: $id\n";
-	
-	
-    my $dbh = DBI->connect("dbi:SQLite:dbname=$dbfile","","", {});
-	
-	                   
-	  my @dbColumsT = qw( ContactID
-                           Contact_BusinessName
-                           Contact_FirstName
-	                   Contact_LastName
-	                   Contact_Street
-	                   Contact_City 
-	                   Contact_State 
-	                   Contact_Zip
-	                   Contact_Phone
-	                   Contact_ContactDate
-	                   Contact_Type
-	                   Contact_Notes   );
-	
-	my $temper = join(",",@dbColumsT);
-	my $sql = "SELECT " . $temper . " FROM ContactData WHERE ContactID=?";
-        
-        my @row = $dbh->selectrow_array($sql,undef,$id);
-                 unless (@row) { die "record not found in database"; }
-   # debug        my ($fname,$lname) = @row;
-	
-     $dbh->disconnect;
-    my $i = 0;
-#    my @darray;
-if(0)
-{
-     while ( $i < 12 )
-     {	
-	$row[$i] = "." unless ( length($row[$i]) > 0 );
-	$i++; 
-     }
- }    	
-	my $tmp = join (" ",@row);
-	
-	print " in GetCurrent - value tmp = $tmp \n ";
-	
-	return  @row;
-}       
-       
+	print "id: $id\n" unless $g_prod_swt;
+	return $id;
+}	
+
 sub SetHeading
 {
 #           $self->{grid_1}->SetColLabelValue(0, "ID" );	
@@ -423,12 +353,13 @@ sub SetHeading
 sub Refresh
 {
 	
-	    initsql();
-	
-    my $dbh = DBI->connect("dbi:SQLite:dbname=$dbfile","","", {});
+#	    initsql();
 
-    my ($count) = $dbh->selectrow_array($g_sqlcount);
+    my $allcontacts =    App::db::contacts->retrieve_all;
 
+    my ($count) = $allcontacts->count;
+
+  
 
 	$g_self->SetTitle("CONTACTS");
         $g_self->{grid_1}->Destroy();
@@ -440,40 +371,40 @@ sub Refresh
 	$g_self->__set_properties();
 	$g_self->__do_layout();	
 		
+    my @allcontacts =    App::db::contacts->retrieve_all;
 
-   my $sth = $dbh->prepare($g_sqlselect);
-
-    $sth->execute();
 
     my $cnt_row = 0;
     my $cnt_col = 0;
     
-    while (my @result = $sth->fetchrow_array()) {
+    set_cells(@allcontacts);
     
-            $g_self->{grid_1}->SetCellValue($cnt_row, 0, $result[1] );
-            $g_self->{grid_1}->SetCellValue($cnt_row, 1, $result[2] );
-            $g_self->{grid_1}->SetCellValue($cnt_row, 2, $result[3] );
-            $g_self->{grid_1}->SetCellValue($cnt_row, 3, $result[4] );
-            $g_self->{grid_1}->SetCellValue($cnt_row, 4, $result[5] );
-            $g_self->{grid_1}->SetCellValue($cnt_row, 5, $result[6] );
-            push ( @g_grid_id_array, $result[0] );
-            $cnt_row++;
-            
-    
-    	
-#        print "id: $result[0], lname: $result[1], fname: $result[2], email: $result[3], password: $result[4]\n";
-    }
-    $sth->finish;
- 	
-	
-#        $self->{grid_1}->SetCellValue(0, 0, "wxGrid is Good");
-        
- $dbh->disconnect;
-	
 }       
 
 # end wxGlade
 }
+
+sub set_cells
+{
+	my (@allcontacts) = @_;
+	
+	my $cnt_row = 0;
+	
+	    foreach my $acontact (@allcontacts) {
+    
+            $g_self->{grid_1}->SetCellValue($cnt_row, 0, $acontact->Contact_FirstName ) if (defined  $acontact->Contact_FirstName);
+            $g_self->{grid_1}->SetCellValue($cnt_row, 1, $acontact->Contact_LastName ) if (defined $acontact->Contact_LastName);
+            $g_self->{grid_1}->SetCellValue($cnt_row, 2, $acontact->Contact_Phone ) if (defined $acontact->Contact_Phone);
+            $g_self->{grid_1}->SetCellValue($cnt_row, 3, $acontact->Contact_State ) if (defined $acontact->Contact_State);
+            $g_self->{grid_1}->SetCellValue($cnt_row, 4, $acontact->Contact_City ) if (defined $acontact->Contact_City);
+            $g_self->{grid_1}->SetCellValue($cnt_row, 5, $acontact->Contact_ContactDate ) if (defined $acontact->Contact_ContactDate);
+            push ( @g_grid_id_array, $acontact->ContactID );
+            $cnt_row++;
+     }       
+
+}
+
+
 
 sub __do_layout {
 	my $self = shift;
