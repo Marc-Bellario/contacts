@@ -2,6 +2,9 @@ package WxSearch; use base qw(Wx::App Exporter);
 # use Class::Date qw(:errors date localdate gmdate now -DateParse -EnvC);
 use strict; 
 use Exporter; 
+use v5.10;
+use YAML qw(LoadFile);
+
 our $VERSION = 0.10;
 our @EXPORT_OK = qw(StartApp FindWindowByXid MsgBox $frame $xr show_search show_dialog 
 %test_list $currentData $xrc $Exit
@@ -25,9 +28,10 @@ my $g_type;
 
 my $g_typeswt;
 my $g_crit;
+my $g_prodswt = 0;
 
-
-
+my $state;
+my $type;
 
 # it is the routine called before the end 
 # it needs to Destroy() all top level dialogs 
@@ -61,9 +65,15 @@ my ($idCancel) = FindWindowByXid('btnCancel');
 Wx::Event::EVT_BUTTON($dialog, $idCancel, \&Exit );
 
 
+    $type = FindWindowByXid('cbType');
+    $state = FindWindowByXid('cbState');
+      append_combo();
+
          my ($idType) = FindWindowByXid('ckType');
           my ($idState) = FindWindowByXid('ckState');
           my ($idName) = FindWindowByXid('ckName');
+          my ($idDate) = FindWindowByXid('ckDateBefore');
+          my ($idDate2) = FindWindowByXid('ckDateAfter');
 
 #   enable controls on start 
              $idName->SetValue(0);
@@ -74,14 +84,20 @@ Wx::Event::EVT_BUTTON($dialog, $idCancel, \&Exit );
             FindWindowByXid('ckName')->Enable();
             
 #  disable date for release 1          
-           FindWindowByXid('ckDateBefore')->Disable();
-          FindWindowByXid('ckDateAfter')->Disable();
+           FindWindowByXid('ckDateBefore')->Enable();
+          FindWindowByXid('ckDateAfter')->Enable();
 
  Wx::Event::EVT_CHECKBOX($dialog,$idType,\&disableFromType);
  
   Wx::Event::EVT_CHECKBOX($dialog,$idState,\&disableFromState);
 
   Wx::Event::EVT_CHECKBOX($dialog,$idName,\&disableFromName);
+
+ Wx::Event::EVT_CHECKBOX($dialog,$idDate,\&disableFromDate);
+    
+ Wx::Event::EVT_CHECKBOX($dialog,$idDate2,\&disableFromDate);
+
+
 
 # 
 # Set event handlers 
@@ -109,20 +125,40 @@ my $md = Wx::MessageDialog->new(our $frame, @args);
 $md->ShowModal(); 
 } 
  
+sub append_combo
+{
+ my  (@settings) = LoadFile('.\res\states.yaml');
+   my  (@settings0) = LoadFile('.\res\type.yaml');
+ 
+      foreach my $s (@settings)
+      {
+             $state->Append($s);
+      }
+      
+      foreach my $t (@settings0)
+      {
+             $type->Append($t);
+      }
+
+}
 
 
 sub  disableFromType
 {
-         print "disable for type\n";
-           if ( FindWindowByXid('ckName')->IsChecked)
-          {
+         say "disable for type" unless $g_prodswt;
+         if ( FindWindowByXid('ckType')->IsChecked)
+         {
                FindWindowByXid('ckState')->Disable();
                FindWindowByXid('ckName')->Disable();
+               FindWindowByXid('ckDateBefore')->Disable();
+               FindWindowByXid('ckDateAfter')->Disable();
          }
          else
          {
                FindWindowByXid('ckState')->Enable();
                FindWindowByXid('ckName')->Enable();
+               FindWindowByXid('ckDateBefore')->Enable();
+               FindWindowByXid('ckDateAfter')->Enable();
          }
 }
 
@@ -130,13 +166,17 @@ sub disableFromName
 {
           if ( FindWindowByXid('ckName')->IsChecked)
           {
-             FindWindowByXid('ckType')->Disable();
+              FindWindowByXid('ckType')->Disable();
               FindWindowByXid('ckState')->Disable();
+              FindWindowByXid('ckDateBefore')->Disable();
+              FindWindowByXid('ckDateAfter')->Disable();
          }
          else
          {
-               FindWindowByXid('ckType')->Enable();
+              FindWindowByXid('ckType')->Enable();
               FindWindowByXid('ckState')->Enable();
+              FindWindowByXid('ckDateBefore')->Enable();
+              FindWindowByXid('ckDateAfter')->Enable();              
          }
 }
 
@@ -145,14 +185,35 @@ sub disableFromState
           print "disable for state\n";   
           if ( FindWindowByXid('ckState')->IsChecked)
           {
-             FindWindowByXid('ckType')->Disable();
+              FindWindowByXid('ckType')->Disable();
               FindWindowByXid('ckName')->Disable();
+              FindWindowByXid('ckDateBefore')->Disable();
+              FindWindowByXid('ckDateAfter')->Disable();
          }
          else
          {
               FindWindowByXid('ckType')->Enable();
               FindWindowByXid('ckName')->Enable();
+              FindWindowByXid('ckDateBefore')->Enable();
+              FindWindowByXid('ckDateAfter')->Enable();              
          }
+}
+
+sub disableFromDate
+{
+          print "disable for date\n";   
+          if ( ( FindWindowByXid('ckDateBefore')->IsChecked) || (FindWindowByXid('ckDateAfter')->IsChecked) )
+          {
+              FindWindowByXid('ckType')->Disable();
+              FindWindowByXid('ckName')->Disable();
+              FindWindowByXid('ckState')->Disable();
+          }
+          else
+          {
+              FindWindowByXid('ckType')->Enable();
+              FindWindowByXid('ckName')->Enable();
+              FindWindowByXid('ckState')->Enable();
+          }
 }
 
 sub show_search {
@@ -170,107 +231,114 @@ sub show_dialog {
 #    my( $self, $event, $parent ) = @_;
    my ($type) = @_;
     $dialog->ShowModal();
-    print " exit - dialog \n";
+    say " exit - dialog " unless $g_prodswt;
 #    $_[0]->Close
 #    $dialog->Destroy;
 }    
    
 sub OnSearch {
-    print " in search routine\n";
+    say " in search routine" unless $g_prodswt;
     my $type = settype();
     my $crit;
     $g_typeswt = $type;
+    
+        my $yy;
+    my $dd;
+    my $mm;
+    my $tdate;
+    my $tdate2;
+    
+    
     if ($type == 1) {
            $g_state = FindWindowByXid('cbState')->GetValue();
            $g_crit = $g_state;
     }      
-    else
+    elsif ($type == 2)
     {
-            if ($type == 2) {
-                   $g_name = FindWindowByXid('tbName')->GetValue();
-                   $g_crit = $g_name;
-            }      
-            else
-            {
-                   if ($type == 3) {
-                        $g_type = FindWindowByXid('cbType')->GetValue();
-                        $g_crit = $g_type;
-                   }      
+            $g_name = FindWindowByXid('tbName')->GetValue();
+            $g_crit = $g_name;
+    }      
+    elsif ($type == 3)
+    {
+            $g_type = FindWindowByXid('cbType')->GetValue();
+            $g_crit = $g_type;
+    }    
+    elsif ($type == 4)
+    {
+            ($yy, $dd, $mm ) = ParseDate(FindWindowByXid('m_datePick02')->GetValue()->FormatDate);
+            $dd = "0". $dd unless length $dd > 1;
+            $mm = "0" .$mm unless length $mm > 1;
+            $tdate = $yy . $mm . $dd ; 
+            ($yy, $dd, $mm ) = ParseDate(FindWindowByXid('m_datePick03')->GetValue()->FormatDate);
+            $dd = "0". $dd unless length $dd > 1;
+            $mm = "0" .$mm unless length $mm > 1;
+            $tdate2 = $yy . $mm . $dd ; 
+            $g_crit = $tdate .  $tdate2 ;
+    }
+    elsif ($type == 5)
+    {
+            ($yy, $dd, $mm ) = ParseDate(FindWindowByXid('m_datePicker2')->GetValue()->FormatDate);
+            $dd = "0". $dd unless length $dd > 1;
+            $mm = "0" .$mm unless length $mm > 1;
+            $tdate = $yy . $mm . $dd ; 
+            $g_crit = $tdate;
+    }      
+    elsif ($type == 6)
+    {
+            ($yy, $dd, $mm ) = ParseDate(FindWindowByXid('m_datePicker3')->GetValue()->FormatDate);
+            $dd = "0". $dd unless length $dd > 1;
+            $mm = "0" .$mm unless length $mm > 1;
+            $tdate = $yy . $mm . $dd ; 
+            $g_crit = $tdate;
+    }      
 
-            }
-    } 
  #   print "state: $g_state\n";
   Exit();
 }
 
+sub ParseDate
+{
+    my $lclDate = shift;
+    $lclDate =~ s{\/}{-}g;
+    print " date mod: $lclDate \n";
+ #   \d{3,}-\d\d-\d\d
+  #  $date =~ /^(\d{4}) (\d{2}) (\d{2})\ (\d{2}):(\d{2})$/x;
+  my ($m,$d,$y) = $lclDate =~ /(\d+)-(\d+)-(\d+)/
+   or die;
+   print " year = $y , month = $m, day = $d \n ";   
+    return ($y, $d, $m );
+}
+
 sub settype
 {         
-          my $type;
+          my $type = 0;
           my $swt_type = FindWindowByXid('ckType')->GetValue();
           my $swt_state = FindWindowByXid('ckState')->GetValue();
           my $swt_name = FindWindowByXid('ckName')->GetValue();
+          my $swt_date_before = FindWindowByXid('ckDateBefore')->GetValue();
+          my $swt_date_after = FindWindowByXid('ckDateAfter')->GetValue();
           
-          print " state-swt: $swt_state\n";
-          print  " name-swt: $swt_name\n";
-          print "type-swt: $swt_type\n";
+          say " state-swt: $swt_state" unless $g_prodswt;
+          say  " name-swt: $swt_name" unless $g_prodswt;
+          say "type-swt: $swt_type" unless $g_prodswt;
+         
+         
+         if ( $swt_type ==1) 
+         { $type = 3; }  
+         elsif ( $swt_state == 1 )
+         { $type = 1; } 
+         elsif ( $swt_name == 1)
+         {  $type = 2; } 
+         elsif (($swt_date_before == 1) && ($swt_date_after == 1))
+         { $type = 4; } 
+         elsif ($swt_date_before == 1)
+         { $type = 5; } 
+         $type = 6 unless ($type > 0); 
           
-          if (( $swt_type ==1 ) && ($swt_state!=1) && ($swt_name!=1))
-          {
-              $type = 3;
-          }
-          else
-          {
-                             if (( $swt_type != 1 ) && ($swt_state==1) && ($swt_name!=1))
-                             {
-                                     $type =1;
-                             }
-                             else
-                             {
-                                 if (( $swt_type!=1 ) && ($swt_state!=1) && ($swt_name==1))
-                                  {
-                                      $type = 2;
-                                  } 
-                             }
-          }
-          
-         print "type:$type\n";
+         say "type:$type" unless $g_prodswt;
          return $type;
 }
 
-
-sub OnUpdate {
-    my $this = shift;
-    use Wx qw(wxOK wxCENTRE);
-    my $lastID = 0;
-        my @data = split (/ /, our $currentData);
-
-       my @dataArray = CreateString();
-    
-    my $dbfile = "contactmanagement.db";
-     my $dbh = DBI->connect("dbi:SQLite:dbname=$dbfile","","", {});
-     
-my $statement;
-if ( $data[0] > 0 )
-{
-        $statement = "UPDATE ContactData SET Contact_FirstName = ?, Contact_LastName = ?, Contact_Phone= ?, Contact_State = ?, Contact_ContactDate = ? WHERE ContactID = ?"; 
-        $dbh->do($statement, undef, $dataArray[0], $dataArray[1],$dataArray[2],$dataArray[3],$dataArray[4], $data[0]);
-}
-else
-{
-    # sub - get index --- 
-     $statement = "INSERT INTO ContactData (ContactID, Contact_BusinessName, Contact_FirstName, Contact_LastName, Contact_Street, Contact_City, Contact_State, Contact_ContactDate) VALUES(?, ?, ?, ?, ?, ?, ?, ?)";
-    $dbh->do($statement, undef, $dataArray[0], $dataArray[1],$dataArray[2],$dataArray[3],$dataArray[4], $data[0]);
-}
-
-    $dbh->disconnect;
-    # Refresh();
-    
-    Wx::MessageBox("_lbl1: $dataArray[0]\n $dataArray[1]\n(c)DamienLearnsPerl",  # text
-                   "About",                   # title bar
-                   wxOK|wxCENTRE,             # buttons to display on form
-                   $this                      # parent
-                   );             
-}
 
 sub CreateString
 {
@@ -283,7 +351,7 @@ sub CreateString
 
 sub Exit 
 { 
- print "search exit\n";
+ say "search exit";
   $dialog->Close; 
 } 
 # 

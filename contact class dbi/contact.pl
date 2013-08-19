@@ -4,10 +4,11 @@
 
 use FindBin;
 use lib "$FindBin::Bin";
-
+use v5.10;
 #use lib "C:\\Documents and Settings\\will\\Desktop\\projects\\contact_app";
 use Wx 0.15 qw[:allclasses];
 use strict;
+use warnings 'all'; 
 use Wx::Grid;
 
 package MyFrame;
@@ -17,7 +18,7 @@ use Wx::Event qw(EVT_GRID_LABEL_LEFT_CLICK EVT_GRID_LABEL_LEFT_DCLICK EVT_MENU);
 use base qw(Wx::Frame);
 use strict;
 use warnings;
-use DBI          qw();
+#use DBI          qw();
 use App::db::contacts; 
 
 use WxContact qw(StartApp   $frame $xr show_add show_dialog %test_list 
@@ -37,7 +38,9 @@ my $g_prod_swt = 0;
 my $g_current_id;
 my $g_srch_cnt;
 #global --- other
-my $g_self; 
+my $g_self;
+my $g_current_row_cnt; 
+my $g_firsttime = 1;
 
 		my @dbColums = qw(ContactID
 		          Contact_FirstName
@@ -138,11 +141,15 @@ sub __set_properties {
     my @grid_id_array;
      @g_grid_id_array = @grid_id_array;
 #  SetHeading();
-  Init();
-                     
+
+if ( $g_firsttime )
+{
+      Init();
+      $g_firsttime = 0;
+ }                    
   EVT_GRID_LABEL_LEFT_CLICK( $self, sub {  print G2S( $_[1] ); print "click\n"; $_[1]->Skip;  });
   EVT_GRID_LABEL_LEFT_DCLICK( $self, \&show_dialog_local);
-
+}
                     
  sub G2S {
   my $event = shift;
@@ -156,7 +163,7 @@ sub __set_properties {
 sub show_dialog_local
 {
    show_dialog(0, $g_current_id);
-   Refresh();	
+   Refresh(0);	
 }       
 
 #    sql set routines
@@ -194,14 +201,15 @@ sub name_search_sql
       
 sub Delete
 {
-	print "Del: $currentDataRow[0] \n" unless $g_prod_swt;
-       show_delete(@currentDataRow);                     
+	say "Del: $currentDataRow[0] " unless $g_prod_swt;
+       show_delete($g_current_id);         
+       Refresh(-1);            
 }
 
  sub Search
 {
 	my $local = $currentData;
-	print "Search: $local \n" unless $g_prod_swt;
+	say "Search: $local " unless $g_prod_swt;
        my($type,$crit) = show_search();
        print "crit: $crit \n" unless $g_prod_swt;
        print "type: $type\n" unless $g_prod_swt;
@@ -213,7 +221,10 @@ sub setsql
 {
        my ($type,$search_crit) = @_;
 
-         print "setsql- type: $type - crit: $search_crit\n" unless $g_prod_swt;
+         say "setsql- type: $type - crit: $search_crit" unless $g_prod_swt;
+
+           $g_sqlselect = ' * ';
+
 
           my @contactresults;
 
@@ -223,14 +234,12 @@ sub setsql
                                	        state_search_sql($search_crit);
                                	       @contactresults = App::db::contacts->search_where(Contact_State => $search_crit);
                                	        $g_srch_cnt = App::db::contacts->count_search_where(Contact_State => $search_crit);
-
                                }     
                                elsif ($type == 2)
                                {
                                          name_search_sql($search_crit);
                                          @contactresults = App::db::contacts->search_where(Contact_LastName => $search_crit);
                                          $g_srch_cnt = App::db::contacts->count_search_where(Contact_LastName => $search_crit);
-
                                }        	 
                                elsif ($type == 3)
                                {
@@ -238,7 +247,53 @@ sub setsql
                                          @contactresults = App::db::contacts->search_where(Contact_Type => $search_crit);
                                         $g_srch_cnt = App::db::contacts->count_search_where(Contact_Type => $search_crit);
                                }
-                               
+                               elsif ($type ==4)
+                               {
+                               			my  $s1  = substr(  $search_crit, 0, 8);
+		                                my  $s2  = substr( $search_crit, 8, 8); 
+
+=begin mess  
+                               	                my $sth = App::db::contacts->db_Main->prepare("SELECT COUNT(*) FROM ContactData WHERE Contact_ContactDate < ? and Contact_ContactDate > ?");
+                                                 $sth->execute( $s1, $s2 ); 
+                                                $g_srch_cnt =   App::db::contacts->sth_to_objects( $sth ); 
+=end mess
+=cut
+
+
+
+                               	                my $sth = App::db::contacts->db_Main->prepare("SELECT * FROM ContactData WHERE Contact_ContactDate < ? and Contact_ContactDate > ?");
+                                                 $sth->execute( $s1, $s2 ); 
+                                                @contactresults =   App::db::contacts->sth_to_objects( $sth ); 
+                #                                $g_srch_cnt = @contractresults + 0;
+                                }
+                               elsif ($type ==5)
+                               {
+=begin mess                               	
+                                       my $sth = App::db::contacts->db_Main->prepare("SELECT COUNT(*) FROM ContactData WHERE Contact_ContactDate < ?");
+                                     $sth->execute( $search_crit ); 
+                                     $g_srch_cnt =   App::db::contacts->sth_to_objects( $sth ); 
+=end mess
+=cut                              	
+                                      my $sth = App::db::contacts->db_Main->prepare("SELECT * FROM ContactData WHERE Contact_ContactDate < ?");
+                                     $sth->execute( $search_crit ); 
+                                     @contactresults =   App::db::contacts->sth_to_objects( $sth ); 
+              #                        $g_srch_cnt = @contractresults + 0;
+
+                                }
+                               elsif ($type ==6)
+                               {
+=begin mess                               	
+                                       my $sth = App::db::contacts->db_Main->prepare("SELECT COUNT(*) FROM ContactData WHERE Contact_ContactDate > ?");
+                                      $sth->execute( $search_crit ); 
+                                      $g_srch_cnt =   App::db::contacts->sth_to_objects( $sth ); 
+=end mess
+=cut                               	
+                                       my $sth = App::db::contacts->db_Main->prepare("SELECT * FROM ContactData WHERE Contact_ContactDate > ?");
+                                      $sth->execute( $search_crit ); 
+                                      @contactresults =   App::db::contacts->sth_to_objects( $sth );
+            #                           $g_srch_cnt = @contractresults + 0;
+                                 }
+                              
                                return @contactresults;
 }
  
@@ -253,18 +308,38 @@ sub Search_Refresh
 	
 
 
-    my ($count) = $g_srch_cnt;
+    my ($count) = @results +0;
  
+      my $diff = $g_current_row_cnt - $count;
  
-    print  "cnt: $count\n" unless $g_prod_swt;
+       say " diff: $diff " unless $g_prod_swt;
+    
+      say  "cnt: $count" unless $g_prod_swt;
+    
 
 	$g_self->SetTitle("CONTACTS-");
+	
+	$g_self->{grid_1}->ClearGrid();
+ 
+        if ($diff > 0 )
+        {
+        	$g_self->{grid_1}->DeleteRows(0,$diff,1);
+        	$g_current_row_cnt = $count;
+        }
+
+        say "current row cnt: $g_current_row_cnt" unless $g_prod_swt;
+
+=being mess	
 	$g_self->{grid_1}->Destroy();
 	
 	print "after destroy\n" unless $g_prod_swt;
 	
         $g_self->{grid_1} = Wx::Grid->new($g_self, -1);
 	$g_self->{grid_1}->CreateGrid($count, 6);
+=end mess
+=cut	
+	
+	
 	$g_self->{grid_1}->SetSelectionMode(wxGridSelectRows);
 		SetHeading();
        $g_self->__set_properties();
@@ -286,11 +361,13 @@ sub Init
 
 #    initsql();
 
+     say "init" unless $g_prod_swt;
 
     my $allcontacts =    App::db::contacts->retrieve_all;
 
     my ($count) = $allcontacts->count;
 
+      $g_current_row_cnt = $count;
 
 	$g_self->SetTitle("CONTACTS");
 
@@ -326,6 +403,7 @@ sub add_dialog
 	my $tmp = join (".",@darray);
 	$currentData = $id . " " . $tmp;
        show_dialog(1);
+       Refresh(1);
 }       
        
 sub getCurrent
@@ -353,17 +431,57 @@ sub Refresh
 	
 #	    initsql();
 
+
+    
+
+  my $refresh_type = shift;
+
+     say "refresh" unless $g_prod_swt;
+
     my $allcontacts =    App::db::contacts->retrieve_all;
 
     my ($count) = $allcontacts->count;
 
-  
+      my $diff = $g_current_row_cnt - $count;
+
+       if ( $diff < 0 )
+       {
+       	     $diff = -$diff;
+       }
 
 	$g_self->SetTitle("CONTACTS");
+
+
+        $g_self->{grid_1}->ClearGrid();
+        
+        if (defined $refresh_type)
+        {
+           if ($refresh_type < 0)
+           {
+        	$g_self->{grid_1}->DeleteRows(0,1,1);
+           }
+           elsif ($refresh_type ==1)
+           {
+        	$g_self->{grid_1}->AppendRows(1,1);
+           }
+        }
+
+                    $g_current_row_cnt =$count;
+
+              
+        say "cnt: $count" unless $g_prod_swt;
+        say  "diff: $diff" unless $g_prod_swt;
+       say  "current row: $g_current_row_cnt" unless $g_prod_swt;
+        
+        $g_self->{grid_1}->AppendRows($diff,1);
+        
+=begin mess        
         $g_self->{grid_1}->Destroy();
-		
 	$g_self->{grid_1} = Wx::Grid->new($g_self, -1);
 	$g_self->{grid_1}->CreateGrid($count, 6);
+=end mess
+=cut
+
 	$g_self->{grid_1}->SetSelectionMode(wxGridSelectRows);
 		SetHeading();
 	$g_self->__set_properties();
@@ -380,7 +498,7 @@ sub Refresh
 }       
 
 # end wxGlade
-}
+# }
 
 sub set_cells
 {

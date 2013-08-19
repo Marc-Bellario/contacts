@@ -1,6 +1,7 @@
 package WxContact; use base qw(Wx::App Exporter); 
 # use Class::Date qw(:errors date localdate gmdate now -DateParse -EnvC);
 use strict; 
+use v5.10;
 use Exporter; 
 use YAML qw(LoadFile);
 use App::db::contacts; 
@@ -42,6 +43,10 @@ my %cntlHash = ();
     my $note;
 
 # our $currentData;
+
+     my $g_prodswt = 0;
+     my $g_type;
+     my $g_id;
 
 
 sub OnInit 
@@ -140,7 +145,7 @@ $md->ShowModal();
 
 sub append_combo
 {
- my  (@settings) = LoadFile('.\res\states.yaml');
+   my  (@settings) = LoadFile('.\res\states.yaml');
    my  (@settings0) = LoadFile('.\res\type.yaml');
  
       foreach my $s (@settings)
@@ -168,7 +173,7 @@ sub show_add {
 
 sub show_dialog {
 #    my( $self, $event, $parent ) = @_;
-   my ($type, $thisCurrentData ) = @_;
+   my ($intype, $thisCurrentData ) = @_;
    
 #   append_combo();
    
@@ -178,21 +183,24 @@ sub show_dialog {
 
              my $idA1 = FindWindowByXid('btnAdd');
 
-   if ($type) { print " ADD - $type \n "; 
+
+    $g_type = $intype;
+    $g_id = $thisCurrentData;
+   if ($intype) { say " ADD - $intype .. " unless $g_prodswt; 
     #      $idA1->SetLabel( "ADD");   
           $lclDBData[0] = "-99";
           $idA1->SetLabel( "Add" );
           $idClear->SetLabel( "Clear");
     } 
     else 
-    { print "CHG\n"; 
+    { say "CHG -- $intype .. " unless $g_prodswt; 
     
           $idA1->SetLabel( "Change" );
           $idClear->SetLabel( "Delete" );
 
         
    
-   print " sub $dialog \n ";
+   say " sub $dialog .. " unless $g_prodswt;
    my $id;
 
 #  get the current contact record
@@ -212,12 +220,13 @@ die $@;
    if ( defined $allcontacts->Contact_City) { $city->ChangeValue($allcontacts->Contact_City) } else {$city->ChangeValue("")}; 
    if ( defined $allcontacts->Contact_Street) {  $address->ChangeValue($allcontacts->Contact_Street) } else { $address->ChangeValue("")} ;
    if ( defined $allcontacts->Contact_State) { $state->SetValue($allcontacts->Contact_State) };
-    
+    if ( defined $allcontacts->Contact_Notes) { $note->SetValue($allcontacts->Contact_Notes) };
+    if ( defined $allcontacts->Contact_Type) { $type->SetValue($allcontacts->Contact_Type) };
 #   if ( $currentLength > 6 && $data[6] ne "." && $data[6] =~ /\d{3,}-\d\d-\d\d/) { $date->SetValue($data[6]) }; 
 
 if ( defined $allcontacts->Contact_ContactDate)
 {
-   my ($yy, $dd, $mm ) =  ParseDate($allcontacts->Contact_ContactDate);
+   my ($yy, $dd, $mm ) =  ParseInDate($allcontacts->Contact_ContactDate);
 
    my $dateObj = Wx::DateTime->newFromDMY($dd,$mm-1,$yy, 1,1,1,1);
    my $tmpstr = $dateObj->Format;
@@ -228,20 +237,41 @@ if ( defined $allcontacts->Contact_ContactDate)
 #    my $dialog = $self->xrc->LoadDialog( $parent || $self, 'dlg1' );
   }
     $dialog->ShowModal();
-    print " exit - add - change dialog \n";
+    say " exit - add - change dialog .." unless $g_prodswt;
 #    $dialog->Destroy;
-}       
+}     
+
+sub ParseInDate
+{
+    my $lclDate = shift;
+    my $m;
+    my $y;
+    my $d;
+ #   $lclDate =~ s{\/}{-}g;
+    print " date mod: $lclDate \n";
+    $m = substr($lclDate,4,2); 
+    $y = substr($lclDate,0,4);
+    $d = substr($lclDate,6,2);
+ #   \d{3,}-\d\d-\d\d
+  #  $date =~ /^(\d{4}) (\d{2}) (\d{2})\ (\d{2}):(\d{2})$/x;
+#  my ($m,$d,$y) = $lclDate =~ /(\d+)-(\d+)-(\d+)/
+  
+  
+#   or die;
+   say " year = $y , month = $m, day = $d  " unless $g_prodswt;;   
+    return ($y, $d, $m );
+}
 
 sub ParseDate
 {
     my $lclDate = shift;
     $lclDate =~ s{\/}{-}g;
-    print " date mod: $lclDate \n";
+    print " date mod: $lclDate \n" unless $g_prodswt;
  #   \d{3,}-\d\d-\d\d
   #  $date =~ /^(\d{4}) (\d{2}) (\d{2})\ (\d{2}):(\d{2})$/x;
   my ($m,$d,$y) = $lclDate =~ /(\d+)-(\d+)-(\d+)/
    or die;
-   print " year = $y , month = $m, day = $d \n ";   
+   print " year = $y , month = $m, day = $d  \n" unless $g_prodswt;   
     return ($y, $d, $m );
 }
 
@@ -250,75 +280,11 @@ sub OnUpdate {
     use Wx qw(wxOK wxCENTRE);
      my $lastID = 0;
 
-     my @dataArray = CreateString();
+     my $data = CreateString();
   
-  	  my @dbColums = qw( 
-                           Contact_BusinessName
-                           Contact_FirstName
-	                   Contact_LastName
-	                   Contact_Street
-	                   Contact_City 
-	                   Contact_State 
-	                   Contact_Zip
-	                   Contact_Phone
-	                   Contact_ContactDate
-	                   Contact_Type
-	                      );
- 
-  
-  
-  
-  
-    
-     my $dbfile = "contactmanagement.db";
-     my $dbh = DBI->connect("dbi:SQLite:dbname=$dbfile","","", {});
-    
-    
-    
-       my @data = @lclDBData;
-  
-     
-my $statement;
-if ( $data[0] > 0 )
-{
-          
-         print " in upt --- > $data[0] \n ";
-         my $ind = 0;
-         while ( $ind < 10 )
-         {  
-             print "val: $ind ---> $dataArray[$ind] <-----";
-             $ind++;
-         }
-         print " \n";
-	  my $tempe = join(" = ?, ",@dbColums);
-#        $statement = "UPDATE ContactData SET Contact_FirstName = ?, Contact_LastName = ?, Contact_Phone= ?, Contact_State = ?, Contact_ContactDate = ? WHERE ContactID = ?"; 
-	                   
-        $statement = "UPDATE ContactData SET " . $tempe . "= ?, Contact_Notes = ? WHERE ContactID = ?"; 
-        $dbh->do($statement, undef, $dataArray[0], $dataArray[1],$dataArray[2],$dataArray[3],$dataArray[4],$dataArray[5], $dataArray[6],$dataArray[7],$dataArray[8],$dataArray[9],$dataArray[10], $data[0]);
-}
-else
-{
-    # sub - get index --- 
-                          my $tempez = join(", ", @dbColums);
-#      $statement = "INSERT INTO ContactData (ContactID, Contact_BusinessName, Contact_FirstName, Contact_LastName, Contact_Street, Contact_City, Contact_State, Contact_ContactDate) VALUES(?, ?, ?, ?, ?, ?, ?, ?)";
-             my $sth = $dbh->prepare("select ContactID from ContactData order by ContactID desc limit 1");
-    $sth->execute();
-    while (
-        my @result = $sth->fetchrow_array()) {
-        print "id: $result[0]\n";
-        $lastID = $result[0];
-    }
-    $sth->finish;
-    $lastID++;
-                     
-     $statement = "INSERT INTO ContactData (ContactID, " . $tempez . ",Contact_Notes) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-    $dbh->do($statement, undef, $lastID, $dataArray[0], $dataArray[1],$dataArray[2],$dataArray[3],$dataArray[4], $dataArray[5], $dataArray[6],$dataArray[7],$dataArray[8],$dataArray[9],$dataArray[10],$dataArray[11]);
-}
-
-    $dbh->disconnect;
     # Refresh();
     
-    Wx::MessageBox("_lbl1: $dataArray[0]\n $dataArray[1]\n(c)DamienLearnsPerl",  # text
+    Wx::MessageBox("_lbl1: $g_id\n $data\n(c)More On Perl",  # text
                    "About",                   # title bar
                    wxOK|wxCENTRE,             # buttons to display on form
                    $this                      # parent
@@ -327,23 +293,69 @@ else
 
 sub CreateString
 {
+    my $intype = shift;
     my @retArray;
     my $id;
     my $cnt = 0;
+    my $yy;
+    my $dd;
+    my $mm;
+    my $tdate;
+
+    ($yy, $dd, $mm ) = ParseDate($date->GetValue()->FormatDate);
+              $dd = "0". $dd unless length $dd > 1;
+              $mm = "0" .$mm unless length $mm > 1;
+              $tdate = $yy . $mm . $dd ; 
+
+    if ($g_type == 0)
+    {
+        say "record change- type: $g_type" unless $g_prodswt;    
     
-          push(@retArray, $bname->GetValue());
-          push(@retArray, $firstname->GetValue());
-          push(@retArray, $lastname->GetValue());
-          push(@retArray, $address->GetValue());
-          push(@retArray, $city->GetValue());
-          push(@retArray, $state->GetValue());
-          push(@retArray, $zip->GetValue());
-          push(@retArray, $phone->GetValue());
-          push(@retArray, $date->GetValue()->FormatDate);
-          push(@retArray, $type->GetValue());
-          push(@retArray, $note->GetValue());
-   
-  return @retArray;
+    my $allcontacts =    App::db::contacts->retrieve($g_id);
+# Save the changes to the database: 
+          $allcontacts->Contact_BusinessName($bname->GetValue());
+          $allcontacts->Contact_FirstName($firstname->GetValue());
+          $allcontacts->Contact_LastName($lastname->GetValue());
+          $allcontacts->Contact_Street($address->GetValue());
+          $allcontacts->Contact_City($city->GetValue());
+          $allcontacts->Contact_State($state->GetValue());
+          $allcontacts->Contact_Zip($zip->GetValue());
+          $allcontacts->Contact_Phone($phone->GetValue());
+          $allcontacts->Contact_ContactDate($tdate);
+          $allcontacts->Contact_Type($type->GetValue());
+          $allcontacts->Contact_Notes($note->GetValue());
+   $allcontacts->update; 
+   if( $@ ) { 
+# There was an error: 
+die $@; 
+} 
+
+   }
+   else
+   {
+               say "record create - type: $g_type " unless $g_prodswt;    
+
+       my $allcontacts = App::db::contacts->create(
+                               Contact_ContactID => $g_id,
+                               Contact_BusinessName => $bname->GetValue(),
+                               Contact_FirstName => $firstname->GetValue(),
+                               Contact_LastName => $lastname->GetValue(),
+                               Contact_Street => $address->GetValue(),
+                               Contact_City => $city->GetValue(),
+                               Contact_State => $state->GetValue(),
+                               Contact_Zip => $zip->GetValue(),
+                               Contact_Phone => $phone->GetValue(),
+                               Contact_ContactDate => $tdate,
+                               Contact_Type => $type->GetValue(),
+                               Contact_Notes => $note->GetValue(),
+                               );
+            if( $@ ) { 
+# There was an error: 
+die $@; 
+} 
+                   
+   }
+  return $lastname->GetValue();
 }
 
 
